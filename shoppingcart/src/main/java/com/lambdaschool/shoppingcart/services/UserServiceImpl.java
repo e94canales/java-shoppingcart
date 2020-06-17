@@ -2,7 +2,9 @@ package com.lambdaschool.shoppingcart.services;
 
 import com.lambdaschool.shoppingcart.exceptions.ResourceFoundException;
 import com.lambdaschool.shoppingcart.exceptions.ResourceNotFoundException;
+import com.lambdaschool.shoppingcart.models.Role;
 import com.lambdaschool.shoppingcart.models.User;
+import com.lambdaschool.shoppingcart.models.UserRoles;
 import com.lambdaschool.shoppingcart.repositories.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -24,6 +26,10 @@ public class UserServiceImpl
 
     @Autowired
     private CartService cartService;
+    @Autowired
+    private RoleService roleService;
+    @Autowired
+    private UserAuditing userAuditing;
 
     @Override
     public List<User> findAll()
@@ -61,8 +67,24 @@ public class UserServiceImpl
     {
         User newUser = new User();
 
-        newUser.setUsername(user.getUsername());
+        newUser.setUsername(user.getUsername().toLowerCase());
+        newUser.setPasswordNoEncrypt(user.getPassword());
         newUser.setComments(user.getComments());
+
+        if (user.getUserid() == 0){
+            for (UserRoles ur : user.getRoles()){
+                Role newRole = roleService.findRoleById(ur.getRole().getRoleid());
+            }
+        } else
+        {
+            // add the new roles for the user we are replacing
+            for (UserRoles ur : user.getRoles())
+            {
+                addUserRole(newUser.getUserid(),
+                        ur.getRole()
+                                .getRoleid());
+            }
+        }
 
         if (user.getCarts()
                 .size() > 0)
@@ -70,5 +92,29 @@ public class UserServiceImpl
             throw new ResourceFoundException("Carts are not added through users");
         }
         return userrepos.save(newUser);
+    }
+
+    @Transactional
+    @Override
+    public void addUserRole(
+            long userid,
+            long roleid)
+    {
+        userrepos.findById(userid)
+                .orElseThrow(() -> new ResourceNotFoundException("User id " + userid + " not found!"));
+        roleService.findRoleById(roleid);
+
+        if (userrepos.checkUserRolesCombo(userid,
+                roleid)
+                .getCount() <= 0)
+        {
+            userrepos.insertUserRoles(userAuditing.getCurrentAuditor()
+                            .get(),
+                    userid,
+                    roleid);
+        } else
+        {
+            throw new ResourceFoundException("Role and User Combination Already Exists");
+        }
     }
 }

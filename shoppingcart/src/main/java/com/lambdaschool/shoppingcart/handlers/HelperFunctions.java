@@ -1,12 +1,17 @@
 package com.lambdaschool.shoppingcart.handlers;
 
+import com.lambdaschool.shoppingcart.exceptions.ResourceNotFoundException;
 import com.lambdaschool.shoppingcart.models.ValidationError;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 import javax.validation.ConstraintViolation;
 import javax.validation.ConstraintViolationException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Class contains helper functions - functions that are needed throughout the application. The class can be autowired
@@ -15,6 +20,17 @@ import java.util.List;
 @Component
 public class HelperFunctions
 {
+    public boolean isAuthorizedToMakeChange(String username){
+        // SEARCHES WHICH AUTH USER IS AUTHORIZED
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (username.equalsIgnoreCase(authentication.getName()) || authentication.getAuthorities().contains((new SimpleGrantedAuthority("ROLE_ADMIN")))){
+            return true;
+        }
+
+        throw new ResourceNotFoundException(authentication.getName() + " is not authorized to make this change.");
+    }
+
     /**
      * Searches to see if the exception has any constraint violations to report
      *
@@ -48,5 +64,18 @@ public class HelperFunctions
             }
         }
         return listVE;
+    }
+
+    public String getCurrentAuditor()
+    {
+        String uname;
+        Authentication authUser = SecurityContextHolder.getContext().getAuthentication();
+        if (authUser != null){
+            uname = authUser.getName();
+        } else {
+            uname = "SYSTEM";
+        }
+
+        return uname;
     }
 }

@@ -1,6 +1,7 @@
 package com.lambdaschool.shoppingcart.services;
 
 import com.lambdaschool.shoppingcart.exceptions.ResourceNotFoundException;
+import com.lambdaschool.shoppingcart.handlers.HelperFunctions;
 import com.lambdaschool.shoppingcart.models.Cart;
 import com.lambdaschool.shoppingcart.models.CartItem;
 import com.lambdaschool.shoppingcart.models.Product;
@@ -17,8 +18,7 @@ import java.util.List;
 @Transactional
 @Service(value = "cartService")
 public class CartServiceImpl
-        implements CartService
-{
+        implements CartService {
     /**
      * Connects this service to the cart repository
      */
@@ -37,6 +37,9 @@ public class CartServiceImpl
     @Autowired
     private ProductRepository productrepos;
 
+    @Autowired
+    private HelperFunctions helperFunctions;
+
     /**
      * Connects this service to the auditing service in order to get current user name
      */
@@ -44,14 +47,12 @@ public class CartServiceImpl
     private UserAuditing userAuditing;
 
     @Override
-    public List<Cart> findAllByUserId(Long userid)
-    {
-        return cartrepos.findAllByUser_Userid(userid);
+    public List<Cart> findAllByUsername(String username) {
+        return cartrepos.findAllByUser_Username(username);
     }
 
     @Override
-    public Cart findCartById(long id)
-    {
+    public Cart findCartById(long id) {
         return cartrepos.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Car id " + id + " not found!"));
     }
@@ -59,72 +60,85 @@ public class CartServiceImpl
     @Transactional
     @Override
     public Cart save(User user,
-                     Product product)
-    {
+                     Product product) {
         Cart newCart = new Cart();
+        String currentUser = userrepos.findByUsernameIgnoreCase(helperFunctions.getCurrentAuditor()).getUsername();
 
-        User dbuser = userrepos.findById(user.getUserid())
-                .orElseThrow(() -> new ResourceNotFoundException("User id " + user.getUserid() + " not found"));
-        newCart.setUser(dbuser);
+        if (helperFunctions.isAuthorizedToMakeChange(currentUser)) {
 
-        Product dbproduct = productrepos.findById(product.getProductid())
-                .orElseThrow(() -> new ResourceNotFoundException("Product id " + product.getProductid() + " not found"));
+            User dbuser = userrepos.findByUsernameIgnoreCase(helperFunctions.getCurrentAuditor());
+            newCart.setUser(dbuser);
 
-        CartItem newCartItem = new CartItem();
-        newCartItem.setCart(newCart);
-        newCartItem.setProduct(dbproduct);
-        newCartItem.setComments("");
-        newCartItem.setQuantity(1);
-        newCart.getProducts()
-                .add(newCartItem);
+            Product dbproduct = productrepos.findById(product.getProductid())
+                    .orElseThrow(() -> new ResourceNotFoundException("Product id " + product.getProductid() + " not found"));
 
-        return cartrepos.save(newCart);
+            CartItem newCartItem = new CartItem();
+            newCartItem.setCart(newCart);
+            newCartItem.setProduct(dbproduct);
+            newCartItem.setComments("");
+            newCartItem.setQuantity(1);
+            newCart.getProducts()
+                    .add(newCartItem);
+
+            return cartrepos.save(newCart);
+        } else {
+            throw new ResourceNotFoundException("Not Authorized");
+        }
     }
 
     @Transactional
     @Override
     public Cart save(Cart cart,
-                     Product product)
-    {
-        Cart updateCart = cartrepos.findById(cart.getCartid())
-                .orElseThrow(() -> new ResourceNotFoundException("Cart Id " + cart.getCartid() + " not found"));
-        Product updateProduct = productrepos.findById(product.getProductid())
-                .orElseThrow(() -> new ResourceNotFoundException("Product id " + product.getProductid() + " not found"));
+                     Product product) {
 
-        if (cartrepos.checkCartItems(updateCart.getCartid(), updateProduct.getProductid())
-                .getCount() > 0)
-        {
-            cartrepos.updateCartItemsQuantity(userAuditing.getCurrentAuditor()
-                                                      .get(), updateCart.getCartid(), updateProduct.getProductid(), 1);
-        } else
-        {
-            cartrepos.addCartItems(userAuditing.getCurrentAuditor()
-                                           .get(), updateCart.getCartid(), updateProduct.getProductid());
+        String currentUser = userrepos.findByUsernameIgnoreCase(helperFunctions.getCurrentAuditor()).getUsername();
+
+        if (helperFunctions.isAuthorizedToMakeChange(currentUser)) {
+
+            Cart updateCart = cartrepos.findById(cart.getCartid())
+                    .orElseThrow(() -> new ResourceNotFoundException("Cart Id " + cart.getCartid() + " not found"));
+            Product updateProduct = productrepos.findById(product.getProductid())
+                    .orElseThrow(() -> new ResourceNotFoundException("Product id " + product.getProductid() + " not found"));
+
+            if (cartrepos.checkCartItems(updateCart.getCartid(), updateProduct.getProductid())
+                    .getCount() > 0) {
+                cartrepos.updateCartItemsQuantity(userAuditing.getCurrentAuditor()
+                        .get(), updateCart.getCartid(), updateProduct.getProductid(), 1);
+            } else {
+                cartrepos.addCartItems(userAuditing.getCurrentAuditor()
+                        .get(), updateCart.getCartid(), updateProduct.getProductid());
+            }
+
+            return cartrepos.save(updateCart);
+        } else {
+            throw new ResourceNotFoundException("Not Authorized");
         }
-
-        return cartrepos.save(updateCart);
     }
 
     @Transactional
     @Override
     public void delete(Cart cart,
-                       Product product)
-    {
-        Cart updateCart = cartrepos.findById(cart.getCartid())
-                .orElseThrow(() -> new ResourceNotFoundException("Cart Id " + cart.getCartid() + " not found"));
-        Product updateProduct = productrepos.findById(product.getProductid())
-                .orElseThrow(() -> new ResourceNotFoundException("Product id " + product.getProductid() + " not found"));
+                       Product product) {
 
-        if (cartrepos.checkCartItems(updateCart.getCartid(), updateProduct.getProductid())
-                .getCount() > 0)
-        {
-            cartrepos.updateCartItemsQuantity(userAuditing.getCurrentAuditor()
-                                                      .get(), updateCart.getCartid(), updateProduct.getProductid(), -1);
-            cartrepos.removeCartItemsQuantityZero();
-            cartrepos.removeCartWithNoProducts();
-        } else
-        {
-            throw new ResourceNotFoundException("Cart id " + updateCart.getCartid() + " Product id " + updateProduct.getProductid() + " combo not found");
+        String currentUser = userrepos.findByUsernameIgnoreCase(helperFunctions.getCurrentAuditor()).getUsername();
+
+        if (helperFunctions.isAuthorizedToMakeChange(currentUser)) {
+            Cart updateCart = cartrepos.findById(cart.getCartid())
+                    .orElseThrow(() -> new ResourceNotFoundException("Cart Id " + cart.getCartid() + " not found"));
+            Product updateProduct = productrepos.findById(product.getProductid())
+                    .orElseThrow(() -> new ResourceNotFoundException("Product id " + product.getProductid() + " not found"));
+
+            if (cartrepos.checkCartItems(updateCart.getCartid(), updateProduct.getProductid())
+                    .getCount() > 0) {
+                cartrepos.updateCartItemsQuantity(userAuditing.getCurrentAuditor()
+                        .get(), updateCart.getCartid(), updateProduct.getProductid(), -1);
+                cartrepos.removeCartItemsQuantityZero();
+                cartrepos.removeCartWithNoProducts();
+            } else {
+                throw new ResourceNotFoundException("Cart id " + updateCart.getCartid() + " Product id " + updateProduct.getProductid() + " combo not found");
+            }
+        } else {
+            throw new ResourceNotFoundException("Not Authorized");
         }
     }
 }
